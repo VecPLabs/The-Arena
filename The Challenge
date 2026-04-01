@@ -1,0 +1,196 @@
+# The VecP Labs Transformer Architecture Challenge
+
+**Hosted by David Cappelli — VecP Labs LLC**
+**Tool: [VecP Labs Transformer Simulator](https://vecplabs.github.io/transformer-simulator)**
+
+---
+
+## Overview
+
+Three AI models — Claude (Anthropic), Grok (xAI), and Gemini (Google) — each design a sub-500M parameter transformer architecture using the VecP Labs Transformer Simulator. Each model must also specify its complete training configuration and select its training corpus. All three designs are then trained for 7,500 steps on identical hardware and scored against shared evaluation benchmarks.
+
+This is not a prompt engineering contest. This is a test of whether an AI model actually understands transformer mechanics well enough to make informed, defensible architectural decisions under real-world constraints.
+
+---
+
+## Rules
+
+### Hardware Constraint
+All designs must train on a single **NVIDIA RTX 4070 Ti Super (16 GB VRAM)** with 64 GB system RAM (Ryzen 5600). If your architecture does not fit in 16 GB VRAM during training, it is disqualified.
+
+### Parameter Budget
+**500 million parameters maximum.** There is no minimum. Parameter efficiency is part of the scoring — using fewer parameters to achieve competitive loss is rewarded, not penalized.
+
+### Training Budget
+All models are trained for exactly **7,500 steps**. No more, no less.
+
+### Training Configuration
+Each competitor specifies their own complete training configuration as part of their submission. This includes but is not limited to:
+
+- Batch size (must fit in 16 GB VRAM)
+- Learning rate and schedule (warmup, decay, cosine, etc.)
+- Optimizer and its hyperparameters
+- Gradient accumulation steps (if any)
+- Sequence length
+- Precision (fp16, bf16, mixed, etc.)
+- Any other training hyperparameters
+
+Training configuration is part of the architecture. A good designer knows how to train their model, not just draw it. Poor training config choices will show up in the loss curve.
+
+### Training Data
+Each competitor selects their own training corpus and must justify the choice in their design document. The corpus must be:
+
+- **Publicly available** (no proprietary datasets)
+- **Downloadable** (David has to actually obtain it)
+- **Clearly specified** (exact dataset name, split, any filtering or preprocessing steps)
+
+Corpus selection is a first-class design decision. You are choosing what your model learns from.
+
+### Submission Format
+Each competitor submits two deliverables:
+
+1. **Transformer Simulator JSON export** — the architecture as built in the VecP Labs Transformer Simulator (vecplabs.github.io/transformer-simulator). The simulator supports primitive-level editing, drag-reorderable components, and versioned JSON import/export.
+
+2. **Design document** — a written explanation covering:
+   - Architectural thesis: What is the core idea behind this design? What problem does it solve or what tradeoff does it navigate?
+   - Layer-by-layer rationale: Why this depth, this width, this head configuration, this FFN ratio?
+   - Training configuration rationale: Why these hyperparameters?
+   - Corpus rationale: Why this data, and how does it interact with the architecture?
+   - Compute analysis: Chinchilla token count awareness, expected FLOP budget, VRAM utilization estimate
+   - Known risks: What could go wrong? Where are the design's weak points?
+
+---
+
+## Evaluation
+
+### Shared Evaluation Sets
+
+All models are evaluated against two benchmarks after training:
+
+1. **Wikitext-103 (test split)** — Primary metric. Encyclopedic, domain-neutral, widely used for perplexity comparison at this scale. No competitor should be training on Wikitext-103.
+
+2. **C4 validation split** — Secondary metric. Web-crawled, more diverse. Provides a generalization check. If a competitor trains on C4, this metric is noted but still measured (the validation split should not leak, but domain proximity is acknowledged).
+
+The metric is **cross-entropy loss (nats)** on each evaluation set. Lower is better. Perplexity can be reported alongside for interpretability (perplexity = exp(loss)).
+
+### Scoring Rubric
+
+Total: **100 points**
+
+#### Phase 1 — Design Evaluation (40 points)
+*Scored from the simulator export and design document before any training occurs.*
+
+| Category | Points | Criteria |
+|---|---|---|
+| **Architectural Coherence** | 15 | Does the design tell a story? Is there a clear thesis? Are the component choices (depth, width, heads, FFN, normalization, positional encoding, etc.) mutually reinforcing, or do they feel like random knob-turning? |
+| **Parameter Efficiency** | 10 | How intelligently is the 500M budget allocated? Are parameters concentrated where they do the most work? Is there unnecessary redundancy? |
+| **Training Config Quality** | 10 | Is the learning rate schedule well-reasoned? Does the batch size make sense for the architecture and the step budget? Is the optimizer choice justified? |
+| **Corpus Strategy** | 5 | Is the training data choice well-matched to the architecture and the evaluation targets? Is the reasoning sound? |
+
+#### Phase 2 — Empirical Performance (45 points)
+*Scored after 7,500 steps of training.*
+
+| Category | Points | Criteria |
+|---|---|---|
+| **Wikitext-103 Loss** | 20 | Primary benchmark. Lowest cross-entropy loss wins full points. Others scored proportionally. |
+| **C4 Validation Loss** | 10 | Secondary benchmark. Same scoring as above. |
+| **Loss Curve Trajectory** | 10 | Is the model still improving at step 7,500, or has it plateaued? A steep downward slope at termination suggests the architecture has room to grow — it was undertrained, not overfit. |
+| **Convergence Efficiency** | 5 | Loss relative to parameter count. A 300M model matching a 490M model's loss is doing more with less. |
+
+#### Phase 3 — Intangibles (15 points)
+
+| Category | Points | Criteria |
+|---|---|---|
+| **Novelty** | 8 | Did the competitor do something structurally interesting? A creative attention variant, an unusual layer structure, a non-standard component arrangement? Or did it build a textbook GPT-2 clone? Innovation that *works* is rewarded. Innovation that's weird for weirdness' sake is not. |
+| **Justification Depth** | 7 | Can the competitor explain *why* each design choice was made in mechanistic terms? "Because it's standard" earns nothing. "Because the FFN-to-attention ratio controls the model's capacity for memorization vs. generalization, and at this parameter scale the bottleneck is X" earns full marks. |
+
+### Scoring Notes
+
+- **Wikitext-103 and C4 loss scoring** is relative: the best performer gets full points, and others are scaled proportionally. This prevents the scoring from being gamed by setting an arbitrary "good" threshold.
+- **Loss curve trajectory** is assessed visually from the training log. The judge (David) evaluates whether the curve suggests healthy optimization dynamics — smooth descent, no instability, no premature plateau.
+- **Convergence efficiency** is measured as: (lowest competitor loss / this model's loss) × (this model's params / largest competitor's params). This rewards doing more with less.
+- In the event of a tie on empirical scores, Phase 1 (Design Evaluation) is the tiebreaker.
+
+---
+
+## Timeline
+
+1. **Design Phase** — Each AI model receives this document and produces its submission (JSON + design document)
+2. **Review Phase** — David scores Phase 1 (Design Evaluation) for all three entries
+3. **Training Phase** — David trains all three models sequentially for 7,500 steps each (~36–40 hours per model)
+4. **Evaluation Phase** — All three trained models are evaluated on Wikitext-103 test and C4 validation
+5. **Scoring and Results** — Final scores tabulated and published
+
+---
+
+## FAQ
+
+**Q: Can I use non-standard components (e.g., custom attention variants, gating mechanisms, novel normalization)?**
+A: Yes, as long as (1) you specify them precisely enough that David can implement them, (2) they fit in the simulator export format, and (3) they train within the VRAM constraint. If the simulator doesn't natively support a component, describe it in the design document with enough detail to implement.
+
+**Q: Can I use a mixture-of-experts architecture?**
+A: Yes, but the total parameter count (including all experts) must be under 500M, and it must fit in 16 GB VRAM during training.
+
+**Q: What if my chosen corpus needs preprocessing?**
+A: Specify the exact preprocessing steps in your design document. Keep it reasonable — David shouldn't need to spend a week cleaning your data. Use a well-known dataset with a well-known preprocessing pipeline.
+
+**Q: Is there a minimum parameter count?**
+A: No. If you can justify a 50M model that you believe will outperform larger ones in 7,500 steps, go for it. Efficiency is rewarded.
+
+**Q: What framework will training use?**
+A: PyTorch. If your design requires specific framework features, note them in the design document.
+
+---
+
+## Competition Rulings (Post-Submission Addendum)
+
+*Issued after independent third-party audits of all three submissions.*
+
+### Ruling 1 — Strict As-Submitted Scoring
+
+**Phase 1 (Design Evaluation) scores are locked on what was submitted.** No corrections, no revisions, no second drafts. The design document and simulator export are scored exactly as received.
+
+If your parameter count is wrong, that's scored. If your VRAM estimate would OOM, that's scored. If your training config is missing critical flags, that's scored. Phase 1 tests whether you can design a system that works *on paper* — and getting the paper wrong is a design failure.
+
+Rationale: The entire point of Phase 1 is to evaluate engineering rigor at the design stage. Allowing post-audit corrections would reward models that submit first drafts and iterate based on feedback rather than models that get it right the first time. An architect who miscalculates load-bearing capacity doesn't get to revise the blueprint after the structural engineer catches it and still get full marks.
+
+### Ruling 2 — Config Adjustment for Training
+
+Despite strict Phase 1 scoring, **all three models will be trained.** The host (David) reserves the right to adjust training configurations to fit the hardware reality:
+
+- If a submission would OOM as specified, the config will be adjusted to the minimum changes necessary to fit in 16 GB VRAM (e.g., reducing micro-batch size, enforcing gradient checkpointing, capping sequence length).
+- If a submission's training time would exceed reasonable bounds (~40–50 hours), the config may be adjusted to bring wall-clock time into parity with other submissions.
+- All adjustments will be documented and disclosed alongside Phase 2 results.
+
+**Adjusted configs do not retroactively improve Phase 1 scores.** The adjustment exists solely to ensure Phase 2 (Empirical Performance) can occur for all competitors. A model whose config required adjustment competes in Phase 2 with whatever architecture it actually has — but the record shows it needed intervention to run.
+
+Rationale: Disqualifying a submission on config errors would eliminate the most interesting part of the challenge — seeing whether the *architecture itself* has merit despite sloppy engineering. The empirical results may vindicate or condemn the design independent of the config mistakes.
+
+### Ruling 3 — Fresh Restart Protocol
+
+Between each training run, the host machine will undergo a **full restart cycle:**
+
+- Complete system reboot (not just process termination)
+- CUDA cache fully cleared
+- No residual GPU memory allocation from previous runs
+- Identical system state at the start of each training run
+
+This ensures no competitor benefits from (or is penalized by) memory fragmentation, orphaned CUDA contexts, or thermal throttling artifacts from a prior run.
+
+### Ruling 4 — Evaluation Context Standardization
+
+All models are evaluated on the shared benchmarks (Wikitext-103 test, C4 validation) using a **standardized evaluation context length of 1024 tokens**, regardless of training sequence length. Models trained at longer context lengths may benefit from their training, but the evaluation playing field is level.
+
+---
+
+## Final Note
+
+This challenge exists to answer a simple question: **Does an AI model understand transformers well enough to build a good one?**
+
+Not recite theory. Not quote papers. *Build one that works.*
+
+The VecP Labs Transformer Simulator was designed to make architecture tangible — every component is editable at the primitive level. The simulator will surface the Chinchilla-optimal token count for your design, your parameter breakdown, your computational profile. Use it.
+
+Good luck.
+
+*— David Cappelli, VecP Labs LLC*
