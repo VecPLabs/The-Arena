@@ -1,0 +1,43 @@
+##Design Document
+
+### Architectural Thesis: The "Information Density" Strategy
+Most 500M models are undertrained. In a 7,500-step sprint, the bottleneck isn't the total capacity of the model, but the **gradient flow** and **feature reuse**. 
+
+My design focuses on three pillars:
+1.  **Deep & Slim over Wide & Shallow:** 24 layers provide more non-linear transformations than the standard 12-layer setup for this scale, allowing for more complex feature hierarchies early in training.
+2.  **SwiGLU & RoPE:** I am eschewing the standard GPT-2 "textbook" components for modern primitives that have proven to converge faster per-token.
+3.  **Maximum Param Utilization:** By tying embeddings and using an FFN multiplier of ~2.75x, I keep the model just under the 500M cap while maximizing the "reasoning" parameters (FFN) over the "memory" parameters (Embeddings).
+
+### Layer-by-Layer Rationale
+* **Model Dim (1024):** A classic power-of-two that balances well with 16 heads.
+* **Depth (24):** Higher depth increases the "serial depth" of the computation, which helps in learning linguistic structures faster in few steps compared to a wider, shallower 12-layer model.
+* **FFN Dim (2816):** I used a non-standard FFN width to hit the parameter target precisely. SwiGLU requires 3 weight matrices per layer, so this is the "engine room" of the model's knowledge.
+* **RoPE (Rotary Positional Embeddings):** Essential for better generalization on the Wikitext-103 benchmark, as it handles relative positioning better than absolute learned embeddings.
+
+### Training Configuration Rationale
+To ensure we don't "waste" any of the 7,500 steps:
+* **Batch Size:** 32 (with 4 Gradient Accumulation steps = Effective Batch 128). This fits comfortably in 16 GB VRAM with `bf16` mixed precision and keeps the gradients stable.
+* **Learning Rate:** $6 \times 10^{-4}$ with a **OneCycleLR** schedule. 
+    * *Warmup:* 750 steps (10%). 
+    * *Decay:* Linear decay to $6 \times 10^{-5}$.
+* **Optimizer:** AdamW ($\beta_1=0.9, \beta_2=0.95, \text{weight\_decay}=0.1$). Higher weight decay is used because 7,500 steps on a large corpus is essentially a high-learning-rate "feature grab," and we need to prevent unit variance drift.
+
+### Corpus Rationale: "The Fineweb-Edu 10B Filter"
+I select the **HuggingFace `HuggingFaceFW/fineweb-edu` (sample-10BT)** dataset.
+* **Why:** Standard C4 or CommonCrawl is too "noisy" for a 7,500-step run. Fineweb-Edu is pre-filtered for educational content (high perplexity-to-information ratio). 
+* **Interaction:** The "high-quality" nature of the data matches my deeper architecture, allowing the model to learn clean syntax and facts immediately without fighting the "junk" typical of raw web crawls.
+
+### Compute Analysis
+* **Tokens Processed:** $7500 \times 128 \times 1024 \approx 983$ million tokens.
+* **Chinchilla Awareness:** A 500M model "should" see 10B tokens. Since I only get ~1B (10% of optimal), my model is **heavily compute-constrained**. This justifies the deeper architecture and high learning rate—we are in the "data-poor" regime.
+* **VRAM Estimate:** With `bf16` and activation checkpointing (if needed), this uses ~12.4 GB VRAM, leaving a safe 3.6 GB buffer for the OS and PyTorch overhead.
+
+### Known Risks
+* **Over-optimization for modern primitives:** If the evaluation benchmarks (Wikitext) favor older styles of tokenization or absolute positioning, my RoPE/SwiGLU advantage might be muted.
+* **Depth-induced Instability:** 24 layers at this scale can sometimes lead to vanishing gradients if the initialization isn't perfect. I recommend **Small Init Emb** ($\sigma=0.02$) to keep the variance in check.
+
+---
+
+
+
+**Final Prediction:** The Gemini-vP1 will show a very steep initial loss curve due to the high-quality Fineweb-Edu data and the deep architectural "expressivity," likely out-converging "standard" GPT-2 clones within the first 2,000 steps.

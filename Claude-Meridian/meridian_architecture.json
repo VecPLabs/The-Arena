@@ -1,0 +1,191 @@
+{
+  "name": "Meridian",
+  "version": "1.0.0",
+  "author": "Claude (Anthropic)",
+  "description": "Width-optimized decoder-only transformer for step-limited training. 405M params, 20 layers, d_model=1280, GQA 5:1, SwiGLU, Residual Gain Modulation.",
+  "architecture": {
+    "type": "decoder_only",
+    "vocab_size": 50257,
+    "d_model": 1280,
+    "max_seq_len": 1024,
+    "n_layers": 20,
+    "tie_embeddings": true,
+    "embedding": {
+      "type": "token_embedding",
+      "vocab_size": 50257,
+      "d_model": 1280,
+      "parameters": 64328960
+    },
+    "positional_encoding": {
+      "type": "rotary",
+      "rope_theta": 10000,
+      "rope_dim": 64,
+      "note": "Applied to Q and K tensors in attention, not added to embeddings"
+    },
+    "layers": [
+      {
+        "layer_template": true,
+        "repeat": 20,
+        "components": [
+          {
+            "name": "pre_attn_norm",
+            "type": "rmsnorm",
+            "dim": 1280,
+            "eps": 1e-5,
+            "parameters": 1280
+          },
+          {
+            "name": "self_attention",
+            "type": "grouped_query_attention",
+            "d_model": 1280,
+            "n_q_heads": 20,
+            "n_kv_heads": 4,
+            "head_dim": 64,
+            "bias": false,
+            "projections": {
+              "q_proj": {
+                "in": 1280,
+                "out": 1280,
+                "parameters": 1638400
+              },
+              "k_proj": {
+                "in": 1280,
+                "out": 256,
+                "parameters": 327680
+              },
+              "v_proj": {
+                "in": 1280,
+                "out": 256,
+                "parameters": 327680
+              },
+              "o_proj": {
+                "in": 1280,
+                "out": 1280,
+                "parameters": 1638400
+              }
+            },
+            "total_parameters": 3932160
+          },
+          {
+            "name": "attn_residual_gain",
+            "type": "residual_gain_modulation",
+            "init_value": 0.15811388300841898,
+            "init_formula": "1/sqrt(2*n_layers)",
+            "learnable": true,
+            "parameters": 1,
+            "note": "Scales attention sublayer output before residual addition: x = x + gamma * attn(norm(x))"
+          },
+          {
+            "name": "pre_ffn_norm",
+            "type": "rmsnorm",
+            "dim": 1280,
+            "eps": 1e-5,
+            "parameters": 1280
+          },
+          {
+            "name": "feed_forward",
+            "type": "swiglu",
+            "d_model": 1280,
+            "intermediate_size": 3413,
+            "activation": "silu",
+            "bias": false,
+            "projections": {
+              "gate_proj": {
+                "in": 1280,
+                "out": 3413,
+                "parameters": 4368640
+              },
+              "up_proj": {
+                "in": 1280,
+                "out": 3413,
+                "parameters": 4368640
+              },
+              "down_proj": {
+                "in": 3413,
+                "out": 1280,
+                "parameters": 4368640
+              }
+            },
+            "computation": "down_proj(silu(gate_proj(x)) * up_proj(x))",
+            "total_parameters": 13105920
+          },
+          {
+            "name": "ffn_residual_gain",
+            "type": "residual_gain_modulation",
+            "init_value": 0.15811388300841898,
+            "init_formula": "1/sqrt(2*n_layers)",
+            "learnable": true,
+            "parameters": 1,
+            "note": "Scales FFN sublayer output before residual addition: x = x + gamma * ffn(norm(x))"
+          }
+        ],
+        "parameters_per_layer": 17040642
+      }
+    ],
+    "output": {
+      "final_norm": {
+        "type": "rmsnorm",
+        "dim": 1280,
+        "eps": 1e-5,
+        "parameters": 1280
+      },
+      "lm_head": {
+        "type": "linear",
+        "in": 1280,
+        "out": 50257,
+        "tied_to": "embedding",
+        "parameters": 0
+      }
+    }
+  },
+  "parameter_summary": {
+    "embedding": 64328960,
+    "transformer_layers": 340812840,
+    "output_head": 1280,
+    "total": 405143080,
+    "budget": 500000000,
+    "utilization": 0.810
+  },
+  "training_config": {
+    "optimizer": {
+      "type": "adamw",
+      "lr": 3e-4,
+      "min_lr": 3e-5,
+      "beta1": 0.9,
+      "beta2": 0.95,
+      "eps": 1e-8,
+      "weight_decay": 0.1
+    },
+    "schedule": {
+      "type": "cosine",
+      "warmup_steps": 375,
+      "total_steps": 7500
+    },
+    "batch": {
+      "micro_batch_size": 8,
+      "gradient_accumulation_steps": 16,
+      "effective_batch_size": 128,
+      "sequence_length": 1024,
+      "tokens_per_step": 131072,
+      "total_tokens": 983040000
+    },
+    "precision": "bf16",
+    "gradient_checkpointing": true,
+    "gradient_clipping": 1.0
+  },
+  "corpus": {
+    "dataset": "cerebras/SlimPajama-627B",
+    "source": "https://huggingface.co/datasets/cerebras/SlimPajama-627B",
+    "tokenizer": "gpt2",
+    "preprocessing": "Pack sequences to 1024 tokens with <|endoftext|> separator. No additional filtering.",
+    "license": "Apache-2.0"
+  },
+  "compute_estimates": {
+    "chinchilla_optimal_tokens": 8100000000,
+    "actual_tokens": 983040000,
+    "data_efficiency": 0.121,
+    "estimated_flops_total": 4.78e18,
+    "estimated_training_hours": 42,
+    "estimated_vram_usage_mb": 10980
+  }
+}
