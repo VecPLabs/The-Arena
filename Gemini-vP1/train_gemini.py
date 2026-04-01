@@ -32,8 +32,8 @@ from submission_2_mha_fixed import ModelConfig, TransformerModel
 # ===========================================================================
 SEED = 42
 SEQ_LEN = 1024
-MICRO_BATCH_SIZE = 32
-GRAD_ACCUM_STEPS = 4
+MICRO_BATCH_SIZE = 8
+GRAD_ACCUM_STEPS = 16
 EFFECTIVE_BATCH_SIZE = MICRO_BATCH_SIZE * GRAD_ACCUM_STEPS  # 128
 TOTAL_STEPS = 7500
 PEAK_LR = 6e-4
